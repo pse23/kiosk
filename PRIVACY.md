@@ -25,7 +25,8 @@ Kiosk makes network requests for:
 ## Local Data
 
 Kiosk stores local preferences such as reader appearance, Speed Reader settings, selected feed, and
-opened story ids. It also stores cached reader extractions so articles reopen faster and can be
+opened story ids. Saved stories, saved comments, and recently viewed stories are kept on the device
+in a local database. It also stores cached reader extractions so articles reopen faster and can be
 available without refetching the original page.
 
 Kiosk does not send this local data to the developer.

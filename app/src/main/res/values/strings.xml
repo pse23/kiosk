@@ -73,4 +73,19 @@
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="theme_sepia">Sepia</string>
+    <string name="open_menu">Open menu</string>
+    <string name="drawer_feeds">Feeds</string>
+    <string name="drawer_library">Library</string>
+    <string name="saved_stories">Saved stories</string>
+    <string name="saved_comments">Saved comments</string>
+    <string name="recently_viewed">Recently viewed</string>
+    <string name="save_story">Save story</string>
+    <string name="unsave_story">Remove story from saved</string>
+    <string name="save_comment">Save comment</string>
+    <string name="unsave_comment">Remove comment from saved</string>
+    <string name="remove_from_saved">Remove from saved</string>
+    <string name="clear_history">Clear history</string>
+    <string name="no_saved_stories">Stories you save appear here.</string>
+    <string name="no_saved_comments">Comments you save appear here.</string>
+    <string name="no_history">Stories you open appear here.</string>
 </resources>
