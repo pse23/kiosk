@@ -30,6 +30,9 @@ import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.BookmarkAdd
+import androidx.compose.material.icons.rounded.BookmarkRemove
 import androidx.compose.material.icons.rounded.Bookmarks
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Forum
@@ -59,6 +62,9 @@ import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.SearchBarState
 import androidx.compose.material3.SearchBarValue
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -80,6 +86,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -600,6 +607,8 @@ private fun StoryList(
     val listState = rememberLazyListState()
     val app = LocalContext.current.applicationContext as KioskApp
     val seenCommentCounts by app.library.seenCommentCounts.collectAsStateWithLifecycle(emptyMap())
+    val savedStoryIds by app.library.savedStoryIds.collectAsStateWithLifecycle(emptySet())
+    val scope = rememberCoroutineScope()
     LaunchedEffect(refreshGeneration, refreshing) {
         if (refreshGeneration > 0 && !refreshing) {
             withFrameNanos { }
@@ -623,19 +632,38 @@ private fun StoryList(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         itemsIndexed(stories, key = { _, story -> story.id }) { index, story ->
-            StoryCard(
-                story = story,
-                selected = story.id == selectedStoryId,
-                viewed = story.id in viewedIds,
-                newComments = newCommentCount(seenCommentCounts[story.id], story.descendants),
-                shape = when {
-                    stories.size == 1 -> MaterialTheme.shapes.medium
-                    index == 0 -> storyFirstShape
-                    index == stories.lastIndex -> storyLastShape
-                    else -> storyMiddleShape
+            val shape = when {
+                stories.size == 1 -> MaterialTheme.shapes.medium
+                index == 0 -> storyFirstShape
+                index == stories.lastIndex -> storyLastShape
+                else -> storyMiddleShape
+            }
+            val saved = story.id in savedStoryIds
+            val swipeState = rememberSwipeToDismissBoxState()
+            // Swipe right to save or unsave; the row snaps back rather than leaving the list.
+            SwipeToDismissBox(
+                state = swipeState,
+                enableDismissFromEndToStart = false,
+                backgroundContent = { SwipeSaveBackground(saved = saved, shape = shape) },
+                onDismiss = { value ->
+                    if (value == SwipeToDismissBoxValue.StartToEnd) {
+                        scope.launch {
+                            app.library.setStorySaved(story, !saved)
+                            swipeState.reset()
+                        }
+                    }
                 },
-                onClick = { onOpenStory(story.id) },
-            )
+            ) {
+                StoryCard(
+                    story = story,
+                    selected = story.id == selectedStoryId,
+                    viewed = story.id in viewedIds,
+                    saved = saved,
+                    newComments = newCommentCount(seenCommentCounts[story.id], story.descendants),
+                    shape = shape,
+                    onClick = { onOpenStory(story.id) },
+                )
+            }
         }
         if (loadingMore) {
             item(key = "loading-more") {
@@ -652,6 +680,7 @@ private fun StoryCard(
     story: Story,
     selected: Boolean,
     viewed: Boolean,
+    saved: Boolean,
     newComments: Int,
     shape: Shape,
     onClick: () -> Unit,
@@ -681,6 +710,18 @@ private fun StoryCard(
         ListItem(
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             leadingContent = { SourceAvatar(url = story.url, title = story.title) },
+            trailingContent = if (saved) {
+                {
+                    Icon(
+                        Icons.Rounded.Bookmark,
+                        contentDescription = stringResource(R.string.saved),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            } else {
+                null
+            },
             supportingContent = storySupportingText(
                 host = hostOf(story.url),
                 newComments = newComments,
@@ -725,6 +766,31 @@ private fun storySupportingText(host: String?, newComments: Int, accent: Color):
             if (host != null) append("  ·  ")
             withStyle(SpanStyle(color = accent, fontWeight = FontWeight.Medium)) { append(newLabel) }
         }
+    }
+}
+
+/** What a right swipe reveals: the action it will take once released past the threshold. */
+@Composable
+private fun SwipeSaveBackground(saved: Boolean, shape: Shape) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .padding(horizontal = 24.dp),
+    ) {
+        Icon(
+            if (saved) Icons.Rounded.BookmarkRemove else Icons.Rounded.BookmarkAdd,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+        Text(
+            text = stringResource(if (saved) R.string.unsave else R.string.save),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.padding(start = 12.dp),
+        )
     }
 }
 
