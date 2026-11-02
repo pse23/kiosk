@@ -24,6 +24,6 @@ exec docker run --rm \
     yes | /sdk/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null || true
     status=0
     ./gradlew --no-daemon "$@" || status=$?
-    chown -R "$HOST_UID:$HOST_GID" /src/app/build /src/build /src/.gradle /src/app/schemas 2>/dev/null || true
+    chown -R "$HOST_UID:$HOST_GID" /src/app/build /src/build /src/.gradle /src/.kotlin /src/app/schemas 2>/dev/null || true
     exit $status
   ' _ "${tasks[@]}"
