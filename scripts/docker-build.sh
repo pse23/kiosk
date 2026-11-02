@@ -1,7 +1,8 @@
 #!/bin/bash
 # Build Kiosk in Docker with no local JDK or Android SDK.
 # Usage: scripts/docker-build.sh [gradle tasks...]   (default: quality :app:assembleDebug)
-# The SDK and Gradle caches persist in the kiosk-android-sdk and kiosk-gradle volumes.
+# The SDK, Gradle caches, and debug signing key persist in the kiosk-android-sdk,
+# kiosk-gradle, and kiosk-android-home volumes, so debug APKs install over each other.
 # Running this accepts the Android SDK licenses inside the container.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -10,7 +11,7 @@ tasks=("$@")
 
 exec docker run --rm \
   -v "$PWD":/src -w /src \
-  -v kiosk-android-sdk:/sdk -v kiosk-gradle:/root/.gradle \
+  -v kiosk-android-sdk:/sdk -v kiosk-gradle:/root/.gradle -v kiosk-android-home:/root/.android \
   -e ANDROID_HOME=/sdk -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
   -e DEBIAN_FRONTEND=noninteractive \
   eclipse-temurin:17-jdk bash -euo pipefail -c '
