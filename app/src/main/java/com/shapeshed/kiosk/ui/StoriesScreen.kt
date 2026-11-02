@@ -1,5 +1,6 @@
 package com.shapeshed.kiosk.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -22,24 +24,34 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Bookmarks
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Forum
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material3.ExpandedFullScreenContainedSearchBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBar
@@ -51,6 +63,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -58,6 +71,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -67,6 +81,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -87,14 +102,14 @@ import kotlinx.coroutines.launch
 private val FEEDS = Feed.entries
 private val storyRoundedRadius = 12.dp
 private val storySquareRadius = 4.dp
-private val storyFirstShape = RoundedCornerShape(
+internal val storyFirstShape = RoundedCornerShape(
     topStart = storyRoundedRadius,
     topEnd = storyRoundedRadius,
     bottomStart = storySquareRadius,
     bottomEnd = storySquareRadius,
 )
-private val storyMiddleShape = RoundedCornerShape(storySquareRadius)
-private val storyLastShape = RoundedCornerShape(
+internal val storyMiddleShape = RoundedCornerShape(storySquareRadius)
+internal val storyLastShape = RoundedCornerShape(
     topStart = storySquareRadius,
     topEnd = storySquareRadius,
     bottomStart = storyRoundedRadius,
@@ -116,6 +131,7 @@ fun StoriesScreen(
     searchBarState: SearchBarState,
     onFeedStoriesChange: (Feed, List<Long>) -> Unit,
     onOpenStory: (Feed?, Long, Boolean) -> Unit,
+    onOpenLibraryStory: (List<Long>, Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val app = LocalContext.current.applicationContext as KioskApp
@@ -142,6 +158,14 @@ fun StoriesScreen(
     var refreshGeneration by remember { mutableIntStateOf(0) }
     val searchViewModel: SearchViewModel = viewModel(factory = SearchViewModel.factory)
     var wasSearchExpanded by remember { mutableStateOf(false) }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    var section by rememberSaveable { mutableStateOf(HomeSection.FEEDS) }
+
+    // Back closes the drawer first, then leaves a library list for the feeds.
+    BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
+    BackHandler(enabled = !drawerState.isOpen && section != HomeSection.FEEDS && !articleOpen && !isSearchExpanded) {
+        section = HomeSection.FEEDS
+    }
 
     // Material3's SearchBar installs its own PredictiveBackHandler internally (nested inside the
     // expanded layout), which always wins priority over a BackHandler declared here — so a
@@ -187,7 +211,9 @@ fun StoriesScreen(
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 } else {
-                    Icon(Icons.Rounded.Search, contentDescription = null)
+                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                        Icon(Icons.Rounded.Menu, contentDescription = stringResource(R.string.open_menu))
+                    }
                 }
             },
             trailingIcon = {
@@ -200,66 +226,159 @@ fun StoriesScreen(
         )
     }
 
-    Box(modifier.fillMaxSize()) {
-        Scaffold(
-            containerColor = MaterialTheme.colorScheme.surface,
-            topBar = {
-                Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
-                    SearchBar(
-                        state = searchBarState,
-                        inputField = searchInputField,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .windowInsetsPadding(WindowInsets.statusBars)
-                            .padding(top = 8.dp, bottom = 8.dp),
-                    )
-                    if (!isSearchExpanded) {
-                        FeedTabs(
-                            selectedIndex = pagerState.currentPage,
-                            onSelect = { index -> scope.launch { pagerState.animateScrollToPage(index) } },
-                        )
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        // Edge swipes would fight the feed pager; the drawer opens from the menu button and closes
+        // by swipe once open.
+        gesturesEnabled = drawerState.isOpen,
+        drawerContent = {
+            KioskDrawer(
+                section = section,
+                selectedFeed = FEEDS[pagerState.currentPage],
+                onSelectFeed = { feed ->
+                    section = HomeSection.FEEDS
+                    scope.launch {
+                        drawerState.close()
+                        pagerState.scrollToPage(FEEDS.indexOf(feed))
                     }
+                },
+                onSelectSection = { picked ->
+                    section = picked
+                    scope.launch { drawerState.close() }
+                },
+            )
+        },
+        modifier = modifier,
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            Scaffold(
+                containerColor = MaterialTheme.colorScheme.surface,
+                topBar = {
+                    Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
+                        SearchBar(
+                            state = searchBarState,
+                            inputField = searchInputField,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .windowInsetsPadding(WindowInsets.statusBars)
+                                .padding(top = 8.dp, bottom = 8.dp),
+                        )
+                        if (!isSearchExpanded && section == HomeSection.FEEDS) {
+                            FeedTabs(
+                                selectedIndex = pagerState.currentPage,
+                                onSelect = { index -> scope.launch { pagerState.animateScrollToPage(index) } },
+                            )
+                        }
+                    }
+                },
+            ) { padding ->
+                if (section != HomeSection.FEEDS) {
+                    LibraryPane(
+                        section = section,
+                        selectedStoryId = selectedStoryId,
+                        onOpenStory = onOpenLibraryStory,
+                        modifier = Modifier.fillMaxSize().padding(padding),
+                    )
+                } else HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize().padding(padding),
+                    key = { FEEDS[it].name },
+                    // Compose the neighbouring feed so it starts loading before the user swipes to it.
+                    beyondViewportPageCount = 1,
+                ) { page ->
+                    FeedPane(
+                        feed = FEEDS[page],
+                        selectedStoryId = selectedStoryId,
+                        onStoryOrderChange = onFeedStoriesChange,
+                        onOpenStory = onOpenStory,
+                        refreshGeneration = refreshGeneration,
+                        onRefreshAll = { refreshGeneration++ },
+                    )
                 }
-            },
-        ) { padding ->
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize().padding(padding),
-                key = { FEEDS[it].name },
-                // Compose the neighbouring feed so it starts loading before the user swipes to it.
-                beyondViewportPageCount = 1,
-            ) { page ->
-                FeedPane(
-                    feed = FEEDS[page],
+            }
+
+            ExpandedFullScreenContainedSearchBar(
+                state = searchBarState,
+                inputField = searchInputField,
+            ) {
+                SearchResultsPane(
+                    query = searchQueryText,
                     selectedStoryId = selectedStoryId,
-                    onStoryOrderChange = onFeedStoriesChange,
-                    onOpenStory = onOpenStory,
-                    refreshGeneration = refreshGeneration,
-                    onRefreshAll = { refreshGeneration++ },
+                    selectedFilter = selectedFilter,
+                    selectedSort = selectedSort,
+                    onFilterChange = { selectedFilter = it },
+                    onSortChange = { selectedSort = it },
+                    onOpenStory = { id ->
+                        searchViewModel.markViewed(id)
+                        onOpenStory(null, id, false)
+                    },
+                    viewModel = searchViewModel,
                 )
             }
         }
+    }
+}
 
-        ExpandedFullScreenContainedSearchBar(
-            state = searchBarState,
-            inputField = searchInputField,
-        ) {
-            SearchResultsPane(
-                query = searchQueryText,
-                selectedStoryId = selectedStoryId,
-                selectedFilter = selectedFilter,
-                selectedSort = selectedSort,
-                onFilterChange = { selectedFilter = it },
-                onSortChange = { selectedSort = it },
-                onOpenStory = { id ->
-                    searchViewModel.markViewed(id)
-                    onOpenStory(null, id, false)
-                },
-                viewModel = searchViewModel,
+/** The left navigation drawer: feeds, then the user's library. */
+@Composable
+private fun KioskDrawer(
+    section: HomeSection,
+    selectedFeed: Feed,
+    onSelectFeed: (Feed) -> Unit,
+    onSelectSection: (HomeSection) -> Unit,
+) {
+    ModalDrawerSheet {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
+            Text(
+                text = stringResource(R.string.app_name),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(start = 16.dp, top = 24.dp, bottom = 16.dp),
             )
+            DrawerHeading(R.string.drawer_feeds)
+            FEEDS.forEach { feed ->
+                NavigationDrawerItem(
+                    label = { Text(stringResource(feed.labelRes())) },
+                    selected = section == HomeSection.FEEDS && feed == selectedFeed,
+                    onClick = { onSelectFeed(feed) },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                )
+            }
+            HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            DrawerHeading(R.string.drawer_library)
+            LibraryDrawerItem(HomeSection.SAVED_STORIES, R.string.saved_stories, Icons.Rounded.Bookmarks, section, onSelectSection)
+            LibraryDrawerItem(HomeSection.SAVED_COMMENTS, R.string.saved_comments, Icons.Rounded.Forum, section, onSelectSection)
+            LibraryDrawerItem(HomeSection.HISTORY, R.string.recently_viewed, Icons.Rounded.History, section, onSelectSection)
+            Box(Modifier.height(16.dp))
         }
     }
+}
+
+@Composable
+private fun DrawerHeading(@StringRes label: Int) {
+    Text(
+        text = stringResource(label),
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
+    )
+}
+
+@Composable
+private fun LibraryDrawerItem(
+    target: HomeSection,
+    @StringRes label: Int,
+    icon: ImageVector,
+    section: HomeSection,
+    onSelectSection: (HomeSection) -> Unit,
+) {
+    NavigationDrawerItem(
+        label = { Text(stringResource(label)) },
+        icon = { Icon(icon, contentDescription = null) },
+        selected = section == target,
+        onClick = { onSelectSection(target) },
+        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+    )
 }
 
 /**

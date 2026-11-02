@@ -55,6 +55,9 @@ fun KioskListDetail() {
     val storyIdsByFeed = remember { mutableStateMapOf<Feed, List<Long>>() }
     var activeFeed by rememberSaveable { mutableStateOf<Feed?>(null) }
     var articleOpenedFromSearch by rememberSaveable { mutableStateOf(false) }
+    // Set when the article came from a library list (saved/history) so swiping follows that list.
+    var articleOpenedFromLibrary by rememberSaveable { mutableStateOf(false) }
+    var libraryStoryIds by remember { mutableStateOf<List<Long>>(emptyList()) }
     // Owned here, not by StoriesScreen, so opening/closing an article can collapse/expand it
     // synchronously around the pane transition (see openStory/closeArticle below) instead of
     // signalling across composables and hoping the two animations happen to line up — that
@@ -68,7 +71,11 @@ fun KioskListDetail() {
     // exited search" collapse without this. Reset as soon as the navigation lands, not left sticky
     // like articleOpenedFromSearch, so a later genuine exit-search action still clears normally.
     var openingArticleFromSearch by remember { mutableStateOf(false) }
-    val activeStoryIds = activeFeed?.let { storyIdsByFeed[it] }.orEmpty()
+    val activeStoryIds = if (articleOpenedFromLibrary) {
+        libraryStoryIds
+    } else {
+        activeFeed?.let { storyIdsByFeed[it] }.orEmpty()
+    }
     val activeStoryIndex = selectedId?.let(activeStoryIds::indexOf) ?: -1
     val previousStoryInListId = activeStoryIds.getOrNull(activeStoryIndex - 1)
     val nextStoryInListId = activeStoryIds.getOrNull(activeStoryIndex + 1)
@@ -87,6 +94,7 @@ fun KioskListDetail() {
     )
     val paneExpansionInteractionSource = remember { MutableInteractionSource() }
     fun openStory(feed: Feed?, id: Long, forceNativeReader: Boolean) {
+        articleOpenedFromLibrary = false
         articleOpenedFromSearch = feed == null
         if (feed == null) openingArticleFromSearch = true
         feed?.let { activeFeed = it }
@@ -104,6 +112,18 @@ fun KioskListDetail() {
         // meant the list pane briefly became visible while search visibly collapsed, before the
         // article appeared on top of it.
         if (feed == null) scope.launch { searchBarState.animateToCollapsed() }
+    }
+    fun openLibraryStory(ids: List<Long>, id: Long, forceNativeReader: Boolean = false) {
+        libraryStoryIds = ids
+        articleOpenedFromLibrary = true
+        articleOpenedFromSearch = false
+        scope.launch {
+            app.settings.markViewed(id)
+            navigator.navigateTo(
+                ListDetailPaneScaffoldRole.Detail,
+                ArticleDestination(storyId = id, forceNativeReader = forceNativeReader).toNavigationKey(),
+            )
+        }
     }
     fun closeArticle() {
         scope.launch {
@@ -139,6 +159,7 @@ fun KioskListDetail() {
                         storyIdsByFeed[feed] = storyIds
                     },
                     onOpenStory = ::openStory,
+                    onOpenLibraryStory = { ids, id -> openLibraryStory(ids, id) },
                 )
             }
         },
@@ -160,8 +181,12 @@ fun KioskListDetail() {
                         previousStoryId = previousStoryInListId,
                         nextStoryId = nextStoryInListId,
                         onOpenAdjacentStory = { adjacentStoryId ->
-                            openStory(activeFeed, adjacentStoryId, destination.forceNativeReader)
-                            articleOpenedFromSearch = false
+                            if (articleOpenedFromLibrary) {
+                                openLibraryStory(libraryStoryIds, adjacentStoryId, destination.forceNativeReader)
+                            } else {
+                                openStory(activeFeed, adjacentStoryId, destination.forceNativeReader)
+                                articleOpenedFromSearch = false
+                            }
                         },
                         showBack = navigator.canNavigateBack(),
                         onBack = ::closeArticle,

@@ -7,6 +7,8 @@ import coil3.SingletonImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.shapeshed.kiosk.data.HnApi
 import com.shapeshed.kiosk.data.HnRepository
+import com.shapeshed.kiosk.data.LibraryDatabase
+import com.shapeshed.kiosk.data.LibraryStore
 import com.shapeshed.kiosk.data.ReaderCacheDatabase
 import com.shapeshed.kiosk.data.ReaderExtractionStore
 import com.shapeshed.kiosk.data.SettingsStore
@@ -47,6 +49,10 @@ class KioskApp : Application(), SingletonImageLoader.Factory {
     }
 
     val settings: SettingsStore by lazy { SettingsStore(this) }
+
+    private val libraryDatabase: LibraryDatabase by lazy { LibraryDatabase.create(this) }
+
+    val library: LibraryStore by lazy { LibraryStore(libraryDatabase.libraryDao()) }
 
     override fun newImageLoader(context: Context): ImageLoader =
         ImageLoader.Builder(context)

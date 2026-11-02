@@ -33,7 +33,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenu
@@ -132,6 +134,9 @@ fun ArticleScreen(
     val commentsState by viewModel.comments.collectAsStateWithLifecycle()
     val story = (storyState as? UiState.Content)?.data
     val storyUrl = story?.url
+    val savedStoryIds by app.library.savedStoryIds.collectAsStateWithLifecycle(emptySet())
+    val savedCommentIds by app.library.savedCommentIds.collectAsStateWithLifecycle(emptySet())
+    val storySaved = story != null && story.id in savedStoryIds
     val darkTheme = isSystemInDarkTheme()
     val scope = rememberCoroutineScope()
     val readerTheme by app.settings.readerTheme.collectAsStateWithLifecycle(ReaderTheme.SYSTEM)
@@ -253,6 +258,11 @@ fun ArticleScreen(
             if (effectiveBarVisible) insetsController?.show(WindowInsetsCompat.Type.systemBars())
             else insetsController?.hide(WindowInsetsCompat.Type.systemBars())
         }
+    }
+    // Only the outermost (chrome-owning) instance records history; per-page pager instances don't.
+    LaunchedEffect(showChrome, story?.id) {
+        val currentStory = story ?: return@LaunchedEffect
+        if (showChrome) app.library.recordView(currentStory)
     }
     LaunchedEffect(showChrome, activeStoryId, story?.id, story?.descendants, story?.kids) {
         val currentStory = story ?: return@LaunchedEffect
@@ -608,6 +618,16 @@ fun ArticleScreen(
                     },
                     actions = {
                         if (openedLinkUrl == null) {
+                            if (story != null) {
+                                IconButton(onClick = {
+                                    scope.launch { app.library.setStorySaved(story, !storySaved) }
+                                }) {
+                                    Icon(
+                                        if (storySaved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                        stringResource(if (storySaved) R.string.unsave_story else R.string.save_story),
+                                    )
+                                }
+                            }
                             val commentCount = story?.descendants ?: 0
                             val hasComments = commentCount > 0 || story?.kids?.isNotEmpty() == true
                             if (hasComments) {
@@ -784,6 +804,12 @@ fun ArticleScreen(
                 CommentsModalSheet(
                     commentCount = story?.descendants ?: 0,
                     state = commentsState,
+                    savedCommentIds = savedCommentIds,
+                    onToggleCommentSaved = { comment, saved ->
+                        story?.let { s ->
+                            scope.launch { app.library.setCommentSaved(comment, s.id, s.title, saved) }
+                        }
+                    },
                     onDismiss = { showComments = false },
                 )
             }

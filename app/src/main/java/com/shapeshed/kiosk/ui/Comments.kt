@@ -3,6 +3,7 @@ package com.shapeshed.kiosk.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -11,7 +12,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
@@ -32,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.shapeshed.kiosk.R
+import com.shapeshed.kiosk.data.Comment
 import com.shapeshed.kiosk.data.FlatComment
 import com.shapeshed.kiosk.data.relativeTime
 
@@ -44,6 +48,8 @@ import com.shapeshed.kiosk.data.relativeTime
 internal fun CommentsModalSheet(
     commentCount: Int,
     state: UiState<List<FlatComment>>,
+    savedCommentIds: Set<Long>,
+    onToggleCommentSaved: (Comment, Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val nowSeconds = remember { System.currentTimeMillis() / 1000 }
@@ -72,7 +78,13 @@ internal fun CommentsModalSheet(
                             item(key = "empty") { Text(stringResource(R.string.no_comments), Modifier.padding(16.dp)) }
                         } else {
                             items(state.data, key = { it.comment.id }) { flat ->
-                                CommentRow(flat, nowSeconds)
+                                val saved = flat.comment.id in savedCommentIds
+                                CommentRow(
+                                    flat = flat,
+                                    nowSeconds = nowSeconds,
+                                    saved = saved,
+                                    onToggleSaved = { onToggleCommentSaved(flat.comment, !saved) },
+                                )
                                 HorizontalDivider()
                             }
                         }
@@ -116,22 +128,47 @@ private fun CommentsSheetHandle(
 }
 
 @Composable
-private fun CommentRow(flat: FlatComment, nowSeconds: Long) {
+private fun CommentRow(
+    flat: FlatComment,
+    nowSeconds: Long,
+    saved: Boolean,
+    onToggleSaved: () -> Unit,
+) {
     val indent = (flat.depth.coerceAtMost(6) * 12).dp
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp + indent, end = 16.dp, top = 12.dp, bottom = 12.dp),
+            .padding(start = 16.dp + indent, end = 4.dp, top = 4.dp, bottom = 12.dp),
     ) {
-        Text(
-            text = "${flat.comment.by}  ·  ${relativeTime(flat.comment.time, nowSeconds)}",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "${flat.comment.by}  ·  ${relativeTime(flat.comment.time, nowSeconds)}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
+            )
+            // Deleted/dead comments have nothing worth keeping.
+            if (!flat.comment.deleted && !flat.comment.dead) {
+                IconButton(onClick = onToggleSaved) {
+                    Icon(
+                        imageVector = if (saved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                        contentDescription = stringResource(
+                            if (saved) R.string.unsave_comment else R.string.save_comment,
+                        ),
+                        tint = if (saved) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+        }
         Text(
             text = flat.comment.text,
             style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(top = 4.dp),
+            modifier = Modifier.padding(end = 12.dp),
         )
     }
 }

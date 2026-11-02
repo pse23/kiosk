@@ -20,6 +20,7 @@ Release APKs are available from [GitHub Releases](https://github.com/shapeshed/k
 - Search historical Hacker News stories.
 - Read articles in a native, distraction-free reader.
 - Swipe between stories, open comments quickly, and keep read/unread state.
+- Save stories and individual comments, and revisit recently viewed stories from the menu.
 - Use reader themes, fonts, Speed Reader, Read Aloud, and zoomable article images.
 - Open PDFs, X/Twitter, YouTube, and external links in the default app or browser.
 
