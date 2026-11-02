@@ -62,9 +62,13 @@ import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.SearchBarState
 import androidx.compose.material3.SearchBarValue
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxState
 import androidx.compose.material3.SwipeToDismissBoxValue
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -174,6 +178,22 @@ fun StoriesScreen(
     val searchViewModel: SearchViewModel = viewModel(factory = SearchViewModel.factory)
     var wasSearchExpanded by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val snackbarHostState = remember { SnackbarHostState() }
+    val storyHiddenLabel = stringResource(R.string.story_hidden)
+    val undoLabel = stringResource(R.string.undo)
+    // Hide at once, offer Undo; the next hide replaces the pending snackbar.
+    val hideStory: (Long) -> Unit = { id ->
+        scope.launch {
+            app.settings.hideStory(id)
+            snackbarHostState.currentSnackbarData?.dismiss()
+            val result = snackbarHostState.showSnackbar(
+                message = storyHiddenLabel,
+                actionLabel = undoLabel,
+                duration = SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) app.settings.unhideStory(id)
+        }
+    }
     var section by rememberSaveable { mutableStateOf(HomeSection.FEEDS) }
 
     // Back closes the drawer first, then leaves a library list for the feeds.
@@ -268,6 +288,7 @@ fun StoriesScreen(
         Box(Modifier.fillMaxSize()) {
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.surface,
+                snackbarHost = { SnackbarHost(snackbarHostState) },
                 topBar = {
                     Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                         SearchBar(
@@ -311,6 +332,7 @@ fun StoriesScreen(
                         onOpenStory = onOpenStory,
                         refreshGeneration = refreshGeneration,
                         onRefreshAll = { refreshGeneration++ },
+                        onHideStory = hideStory,
                     )
                 }
             }
@@ -539,6 +561,7 @@ private fun FeedPane(
     onOpenStory: (Feed?, Long, Boolean) -> Unit,
     refreshGeneration: Int,
     onRefreshAll: () -> Unit,
+    onHideStory: (Long) -> Unit,
     viewModel: StoriesViewModel = viewModel(
         key = "feed-${feed.name}",
         factory = StoriesViewModel.factory(feed),
@@ -556,14 +579,15 @@ private fun FeedPane(
     val settings = (LocalContext.current.applicationContext as KioskApp).settings
     val mutedDomains by settings.mutedDomains.collectAsStateWithLifecycle(emptySet())
     val mutedKeywords by settings.mutedKeywords.collectAsStateWithLifecycle(emptySet())
+    val hiddenIds by settings.hiddenStoryIds.collectAsStateWithLifecycle(emptySet())
 
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         when (val current = state) {
             is UiState.Loading -> LoadingIndicator()
             is UiState.Error -> ErrorState(onRetry = viewModel::load)
             is UiState.Content -> {
-                val shown = remember(current.data, mutedDomains, mutedKeywords) {
-                    current.data.filterNot { isMuted(it, mutedDomains, mutedKeywords) }
+                val shown = remember(current.data, mutedDomains, mutedKeywords, hiddenIds) {
+                    current.data.filterNot { it.id in hiddenIds || isMuted(it, mutedDomains, mutedKeywords) }
                 }
                 LaunchedEffect(feed, shown) {
                     onStoryOrderChange(feed, shown.map(Story::id))
@@ -585,6 +609,7 @@ private fun FeedPane(
                             viewModel.markViewed(id)
                             onOpenStory(feed, id, false)
                         },
+                        onHide = onHideStory,
                     )
                 }
             }
@@ -603,6 +628,8 @@ private fun StoryList(
     refreshGeneration: Int = 0,
     onLoadMore: () -> Unit,
     onOpenStory: (Long) -> Unit,
+    /** Feeds pass this to enable swipe-left-to-hide; search results don't. */
+    onHide: ((Long) -> Unit)? = null,
 ) {
     val listState = rememberLazyListState()
     val app = LocalContext.current.applicationContext as KioskApp
@@ -639,18 +666,30 @@ private fun StoryList(
                 else -> storyMiddleShape
             }
             val saved = story.id in savedStoryIds
-            val swipeState = rememberSwipeToDismissBoxState()
-            // Swipe right to save or unsave; the row snaps back rather than leaving the list.
+            // Plain remember, not the saveable default: LazyColumn keeps saved state per key, so a
+            // row brought back by Undo would come back already dismissed and hide itself again.
+            val swipeState = remember {
+                SwipeToDismissBoxState(SwipeToDismissBoxValue.Settled, positionalThreshold = { it * 0.4f })
+            }
+            // Swipe right to save or unsave (the row snaps back); swipe left to hide it.
             SwipeToDismissBox(
                 state = swipeState,
-                enableDismissFromEndToStart = false,
-                backgroundContent = { SwipeSaveBackground(saved = saved, shape = shape) },
+                enableDismissFromEndToStart = onHide != null,
+                backgroundContent = {
+                    if (swipeState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
+                        SwipeHideBackground(shape = shape)
+                    } else {
+                        SwipeSaveBackground(saved = saved, shape = shape)
+                    }
+                },
                 onDismiss = { value ->
-                    if (value == SwipeToDismissBoxValue.StartToEnd) {
-                        scope.launch {
+                    when (value) {
+                        SwipeToDismissBoxValue.StartToEnd -> scope.launch {
                             app.library.setStorySaved(story, !saved)
                             swipeState.reset()
                         }
+                        SwipeToDismissBoxValue.EndToStart -> onHide?.invoke(story.id)
+                        SwipeToDismissBoxValue.Settled -> Unit
                     }
                 },
             ) {
@@ -790,6 +829,32 @@ private fun SwipeSaveBackground(saved: Boolean, shape: Shape) {
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier.padding(start = 12.dp),
+        )
+    }
+}
+
+/** What a left swipe reveals: the row leaves the feed when released past the threshold. */
+@Composable
+private fun SwipeHideBackground(shape: Shape) {
+    Row(
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .padding(horizontal = 24.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.hide),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.padding(end = 12.dp),
+        )
+        Icon(
+            Icons.Rounded.VisibilityOff,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSecondaryContainer,
         )
     }
 }

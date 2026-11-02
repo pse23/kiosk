@@ -25,6 +25,9 @@
     <string name="save">Save</string>
     <string name="unsave">Unsave</string>
     <string name="saved">Saved</string>
+    <string name="hide">Hide</string>
+    <string name="story_hidden">Story hidden</string>
+    <string name="undo">Undo</string>
     <string name="muted">Muted</string>
     <string name="mute_site">Mute %1$s</string>
     <string name="muted_site_toast">Stories from %1$s are hidden</string>
