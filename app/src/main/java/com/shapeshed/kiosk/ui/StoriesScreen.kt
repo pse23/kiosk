@@ -83,7 +83,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -96,6 +101,7 @@ import com.shapeshed.kiosk.data.SearchFilter
 import com.shapeshed.kiosk.data.SearchSort
 import com.shapeshed.kiosk.data.Story
 import com.shapeshed.kiosk.data.hostOf
+import com.shapeshed.kiosk.data.newCommentCount
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -579,6 +585,8 @@ private fun StoryList(
     onOpenStory: (Long) -> Unit,
 ) {
     val listState = rememberLazyListState()
+    val app = LocalContext.current.applicationContext as KioskApp
+    val seenCommentCounts by app.library.seenCommentCounts.collectAsStateWithLifecycle(emptyMap())
     LaunchedEffect(refreshGeneration, refreshing) {
         if (refreshGeneration > 0 && !refreshing) {
             withFrameNanos { }
@@ -606,6 +614,7 @@ private fun StoryList(
                 story = story,
                 selected = story.id == selectedStoryId,
                 viewed = story.id in viewedIds,
+                newComments = newCommentCount(seenCommentCounts[story.id], story.descendants),
                 shape = when {
                     stories.size == 1 -> MaterialTheme.shapes.medium
                     index == 0 -> storyFirstShape
@@ -630,6 +639,7 @@ private fun StoryCard(
     story: Story,
     selected: Boolean,
     viewed: Boolean,
+    newComments: Int,
     shape: Shape,
     onClick: () -> Unit,
 ) {
@@ -658,10 +668,14 @@ private fun StoryCard(
         ListItem(
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             leadingContent = { SourceAvatar(url = story.url, title = story.title) },
-            supportingContent = hostOf(story.url)?.let { host ->
+            supportingContent = storySupportingText(
+                host = hostOf(story.url),
+                newComments = newComments,
+                accent = if (selected) supportingColor else MaterialTheme.colorScheme.primary,
+            )?.let { line ->
                 {
                     Text(
-                        text = host,
+                        text = line,
                         style = MaterialTheme.typography.bodyMedium,
                         color = supportingColor,
                         maxLines = 1,
@@ -679,6 +693,24 @@ private fun StoryCard(
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
+        }
+    }
+}
+
+/** "host · 12 new", with the new-comment count in [accent]; null when there's nothing to show. */
+@Composable
+private fun storySupportingText(host: String?, newComments: Int, accent: Color): AnnotatedString? {
+    val newLabel = if (newComments > 0) {
+        pluralStringResource(R.plurals.new_comments, newComments, newComments)
+    } else {
+        null
+    }
+    if (host == null && newLabel == null) return null
+    return buildAnnotatedString {
+        host?.let { append(it) }
+        if (newLabel != null) {
+            if (host != null) append("  ·  ")
+            withStyle(SpanStyle(color = accent, fontWeight = FontWeight.Medium)) { append(newLabel) }
         }
     }
 }

@@ -57,4 +57,20 @@ class TextUtilsTest {
         assertEquals("2mo", relativeTime(now - 5_184_000, now))
         assertEquals("2y", relativeTime(now - 63_072_000, now))
     }
+
+    @Test
+    fun newCommentCountIsZeroForUnopenedStories() {
+        assertEquals(0, newCommentCount(seen = null, current = 40))
+    }
+
+    @Test
+    fun newCommentCountIsTheGrowthSinceLastVisit() {
+        assertEquals(12, newCommentCount(seen = 30, current = 42))
+        assertEquals(0, newCommentCount(seen = 42, current = 42))
+    }
+
+    @Test
+    fun newCommentCountIgnoresShrinkingThreads() {
+        assertEquals(0, newCommentCount(seen = 42, current = 40))
+    }
 }

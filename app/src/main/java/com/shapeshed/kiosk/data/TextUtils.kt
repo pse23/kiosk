@@ -69,3 +69,10 @@ fun relativeTime(epochSeconds: Long, nowSeconds: Long): String {
         else -> "${diff / 31_536_000}y"
     }
 }
+
+/**
+ * Comments added since the user last opened a story: 0 for a story never opened ([seen] null) or
+ * one whose count dropped (deleted comments).
+ */
+fun newCommentCount(seen: Int?, current: Int): Int =
+    if (seen == null) 0 else (current - seen).coerceAtLeast(0)
