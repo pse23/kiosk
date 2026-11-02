@@ -15,6 +15,12 @@
         <item quantity="one">%d new comment</item>
         <item quantity="other">%d new comments</item>
     </plurals>
+    <plurals name="hidden_replies">
+        <item quantity="one">%d reply hidden</item>
+        <item quantity="other">%d replies hidden</item>
+    </plurals>
+    <string name="collapsed">Collapsed</string>
+    <string name="next_thread">Next thread</string>
     <string name="retry">Retry</string>
     <string name="couldnt_load">Couldn\'t load stories.</string>
     <string name="couldnt_load_comments">Couldn\'t load comments.</string>
