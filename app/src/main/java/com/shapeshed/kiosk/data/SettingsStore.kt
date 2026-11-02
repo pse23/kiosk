@@ -13,6 +13,9 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
+/** What swiping a story row does in one direction. NONE leaves the drag to the feed pager. */
+enum class SwipeAction { NONE, SAVE, HIDE }
+
 /** Reader appearance choice; SYSTEM follows the device light/dark setting. */
 enum class ReaderTheme { SYSTEM, LIGHT, DARK, SEPIA }
 
@@ -52,6 +55,26 @@ class SettingsStore(private val context: Context) {
     private val speedReaderFontKey = stringPreferencesKey("speed_reader_font")
     private val viewedKey = stringSetPreferencesKey("viewed_story_ids")
     private val hiddenKey = stringSetPreferencesKey("hidden_story_ids")
+    private val swipeRightKey = stringPreferencesKey("swipe_right_action")
+    private val swipeLeftKey = stringPreferencesKey("swipe_left_action")
+
+    /** Swipe right (start to end); defaults to saving. */
+    val swipeRightAction: Flow<SwipeAction> = context.dataStore.data.map { prefs ->
+        prefs[swipeRightKey]?.let { runCatching { SwipeAction.valueOf(it) }.getOrNull() } ?: SwipeAction.SAVE
+    }
+
+    /** Swipe left (end to start); defaults to hiding. */
+    val swipeLeftAction: Flow<SwipeAction> = context.dataStore.data.map { prefs ->
+        prefs[swipeLeftKey]?.let { runCatching { SwipeAction.valueOf(it) }.getOrNull() } ?: SwipeAction.HIDE
+    }
+
+    suspend fun setSwipeRightAction(action: SwipeAction) {
+        context.dataStore.edit { it[swipeRightKey] = action.name }
+    }
+
+    suspend fun setSwipeLeftAction(action: SwipeAction) {
+        context.dataStore.edit { it[swipeLeftKey] = action.name }
+    }
 
     /** Stories swiped away from the feeds. */
     val hiddenStoryIds: Flow<Set<Long>> = context.dataStore.data.map { prefs ->
