@@ -4,7 +4,9 @@ A Hacker News reader for Android.
 
 ## Install
 
-Release APKs are available from [GitHub Releases](https://github.com/shapeshed/kiosk/releases).
+Release APKs are available from [GitHub Releases](https://github.com/pse23/kiosk/releases).
+
+This is a fork of [shapeshed/kiosk](https://github.com/shapeshed/kiosk).
 
 ## Screenshots
 
