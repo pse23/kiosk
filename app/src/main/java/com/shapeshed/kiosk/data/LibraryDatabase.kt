@@ -87,6 +87,24 @@ interface LibraryDao {
     @Query("DELETE FROM saved_comments WHERE commentId = :commentId")
     suspend fun deleteSavedComment(commentId: Long)
 
+    @Query("SELECT * FROM saved_stories")
+    suspend fun allSavedStories(): List<SavedStoryEntity>
+
+    @Query("SELECT * FROM saved_comments")
+    suspend fun allSavedComments(): List<SavedCommentEntity>
+
+    @Query("SELECT * FROM history")
+    suspend fun allHistory(): List<HistoryEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putSavedStories(entities: List<SavedStoryEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putSavedComments(entities: List<SavedCommentEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putHistoryEntries(entities: List<HistoryEntity>)
+
     @Query("SELECT * FROM history ORDER BY viewedAtMillis DESC")
     fun history(): Flow<List<HistoryEntity>>
 
@@ -246,6 +264,17 @@ class LibraryStore(private val dao: LibraryDao) {
     }
 
     suspend fun clearHistory() = dao.clearHistory()
+
+    suspend fun exportBackup(): LibraryBackup =
+        LibraryBackup(dao.allSavedStories(), dao.allSavedComments(), dao.allHistory())
+
+    /** Merges [backup] in; an entry already present is replaced by the file's copy. */
+    suspend fun importBackup(backup: LibraryBackup) {
+        dao.putSavedStories(backup.savedStories)
+        dao.putSavedComments(backup.savedComments)
+        dao.putHistoryEntries(backup.history)
+        dao.trimHistory(MAX_HISTORY)
+    }
 
     private companion object {
         const val MAX_HISTORY = 200
