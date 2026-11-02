@@ -116,3 +116,16 @@ private fun JSONArray?.toLongList(): List<Long> {
     if (this == null) return emptyList()
     return (0 until length()).map { getLong(it) }
 }
+
+/** Parse the user endpoint's body, or null when the account doesn't exist ("null" body). */
+fun parseUserJson(body: String): HnUser? {
+    val o = runCatching { JSONObject(body) }.getOrNull() ?: return null
+    val id = o.optString("id").takeIf { it.isNotBlank() } ?: return null
+    return HnUser(
+        id = id,
+        created = o.optLong("created"),
+        karma = o.optInt("karma"),
+        about = o.optString("about").takeIf { it.isNotBlank() }?.let(::decodeHtml),
+        submitted = o.optJSONArray("submitted").toLongList(),
+    )
+}

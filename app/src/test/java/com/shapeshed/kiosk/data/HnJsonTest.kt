@@ -165,4 +165,24 @@ class HnJsonTest {
         deleted: Boolean = false,
     ): Pair<Long, Comment> =
         id to Comment(id, by = "u$id", time = 0, text = "c$id", kids = kids, deleted = deleted, dead = false)
+
+    @Test
+    fun parseUserJsonReadsProfile() {
+        val user = parseUserJson(
+            """{"id":"pg","created":1160418092,"karma":157316,"about":"Bug fixer.<p>Writes &amp; ships.","submitted":[3,2,1]}""",
+        )!!
+        assertEquals("pg", user.id)
+        assertEquals(1160418092L, user.created)
+        assertEquals(157316, user.karma)
+        assertEquals("Bug fixer.\n\nWrites & ships.", user.about)
+        assertEquals(listOf(3L, 2L, 1L), user.submitted)
+    }
+
+    @Test
+    fun parseUserJsonHandlesMissingAccountAndFields() {
+        assertEquals(null, parseUserJson("null"))
+        val bare = parseUserJson("""{"id":"new","created":1,"karma":1}""")!!
+        assertEquals(null, bare.about)
+        assertEquals(emptyList<Long>(), bare.submitted)
+    }
 }

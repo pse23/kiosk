@@ -13,6 +13,15 @@ data class Story(
     val text: String?,         // decoded body for self-posts
 )
 
+/** A Hacker News account, from the public user endpoint. */
+data class HnUser(
+    val id: String,
+    val created: Long,         // unix seconds
+    val karma: Int,
+    val about: String?,        // decoded from the API's HTML
+    val submitted: List<Long>, // newest first: stories, comments, polls
+)
+
 /** A single comment. [text] is already decoded from the API's HTML to plain text. */
 data class Comment(
     val id: Long,

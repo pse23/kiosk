@@ -28,6 +28,18 @@ class HnRepository(private val api: HnApi) {
         api.itemJson(id)?.let(::parseStoryJson)
     }
 
+    /** A user's profile, or null if the account doesn't exist. */
+    suspend fun user(id: String): HnUser? = withContext(Dispatchers.IO) {
+        api.userJson(id)?.let(::parseUserJson)
+    }
+
+    /**
+     * Up to [limit] of the user's most recent stories. Their submissions mix stories and comments,
+     * so this looks through the newest [scan] ids and keeps the ones that parse as stories.
+     */
+    suspend fun recentStories(user: HnUser, limit: Int = 10, scan: Int = 40): List<Story> =
+        stories(user.submitted.take(scan)).take(limit)
+
     suspend fun search(
         query: String,
         filter: SearchFilter,
