@@ -1,0 +1,6 @@
+- Menu drawer with Feeds, Saved stories, Saved comments, Recently viewed, Muted, and Swipe actions.
+- Save stories and single comments; saved stories open offline.
+- "N new comments" on stories opened before.
+- Collapse comment threads, jump to the next thread, OP tag, tap a name for the profile.
+- Swipe a story to save or hide it, with a choice per direction.
+- Mute sites and title words; search the library; export and import it as JSON.
