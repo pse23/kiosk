@@ -51,6 +51,24 @@ class SettingsStore(private val context: Context) {
     private val speedReaderThemeKey = stringPreferencesKey("speed_reader_theme")
     private val speedReaderFontKey = stringPreferencesKey("speed_reader_font")
     private val viewedKey = stringSetPreferencesKey("viewed_story_ids")
+    private val hiddenKey = stringSetPreferencesKey("hidden_story_ids")
+
+    /** Stories swiped away from the feeds. */
+    val hiddenStoryIds: Flow<Set<Long>> = context.dataStore.data.map { prefs ->
+        prefs[hiddenKey].orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
+    }
+
+    suspend fun hideStory(id: Long) {
+        context.dataStore.edit { prefs ->
+            val updated = prefs[hiddenKey].orEmpty() + id.toString()
+            // Old ids fall off the front; by then the story has left every feed anyway.
+            prefs[hiddenKey] = if (updated.size > MAX_VIEWED) updated.drop(updated.size - MAX_VIEWED).toSet() else updated
+        }
+    }
+
+    suspend fun unhideStory(id: Long) {
+        context.dataStore.edit { it[hiddenKey] = it[hiddenKey].orEmpty() - id.toString() }
+    }
     private val selectedFeedKey = stringPreferencesKey("selected_feed")
     private val mutedDomainsKey = stringSetPreferencesKey("muted_domains")
     private val mutedKeywordsKey = stringSetPreferencesKey("muted_keywords")
