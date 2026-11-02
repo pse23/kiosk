@@ -29,6 +29,18 @@
     <string name="story_hidden">Story hidden</string>
     <string name="undo">Undo</string>
     <string name="swipe_actions">Swipe actions</string>
+    <string name="export_library">Export library</string>
+    <string name="import_library">Import library</string>
+    <plurals name="library_exported">
+        <item quantity="one">Exported %d item</item>
+        <item quantity="other">Exported %d items</item>
+    </plurals>
+    <plurals name="library_imported">
+        <item quantity="one">Imported %d item</item>
+        <item quantity="other">Imported %d items</item>
+    </plurals>
+    <string name="library_export_failed">Couldn\'t export the library.</string>
+    <string name="library_import_failed">That file isn\'t a Kiosk library backup.</string>
     <string name="swipe_right">Swipe right</string>
     <string name="swipe_left">Swipe left</string>
     <string name="swipe_none">None</string>

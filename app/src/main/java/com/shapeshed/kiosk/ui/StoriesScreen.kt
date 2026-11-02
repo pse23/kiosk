@@ -1,6 +1,9 @@
 package com.shapeshed.kiosk.ui
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -37,7 +40,9 @@ import androidx.compose.material.icons.rounded.Bookmarks
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material.icons.rounded.SwipeLeft
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.ExpandedFullScreenContainedSearchBar
@@ -96,6 +101,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -112,13 +118,17 @@ import com.shapeshed.kiosk.R
 import com.shapeshed.kiosk.data.Feed
 import com.shapeshed.kiosk.data.SearchFilter
 import com.shapeshed.kiosk.data.SearchSort
+import com.shapeshed.kiosk.data.decodeLibraryBackup
+import com.shapeshed.kiosk.data.encodeLibraryBackup
 import com.shapeshed.kiosk.data.SwipeAction
 import com.shapeshed.kiosk.data.Story
 import com.shapeshed.kiosk.data.hostOf
 import com.shapeshed.kiosk.data.newCommentCount
 import com.shapeshed.kiosk.data.isMuted
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val FEEDS = Feed.entries
 private val storyRoundedRadius = 12.dp
@@ -283,6 +293,7 @@ fun StoriesScreen(
                     section = picked
                     scope.launch { drawerState.close() }
                 },
+                onCloseDrawer = { scope.launch { drawerState.close() } },
             )
         },
         modifier = modifier,
@@ -370,6 +381,7 @@ private fun KioskDrawer(
     selectedFeed: Feed,
     onSelectFeed: (Feed) -> Unit,
     onSelectSection: (HomeSection) -> Unit,
+    onCloseDrawer: () -> Unit,
 ) {
     ModalDrawerSheet {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
@@ -392,12 +404,88 @@ private fun KioskDrawer(
             LibraryDrawerItem(HomeSection.SAVED_STORIES, R.string.saved_stories, Icons.Rounded.Bookmarks, section, onSelectSection)
             LibraryDrawerItem(HomeSection.SAVED_COMMENTS, R.string.saved_comments, Icons.Rounded.Forum, section, onSelectSection)
             LibraryDrawerItem(HomeSection.HISTORY, R.string.recently_viewed, Icons.Rounded.History, section, onSelectSection)
+            LibraryBackupItems(onLaunch = onCloseDrawer)
             HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             LibraryDrawerItem(HomeSection.MUTED, R.string.muted, Icons.Rounded.VisibilityOff, section, onSelectSection)
             LibraryDrawerItem(HomeSection.SWIPE, R.string.swipe_actions, Icons.Rounded.SwipeLeft, section, onSelectSection)
             Box(Modifier.height(16.dp))
         }
     }
+}
+
+/**
+ * Export writes the library to a JSON file the user picks; import merges one back in. Both go
+ * through the system file picker, so Kiosk needs no storage permission.
+ */
+@Composable
+private fun LibraryBackupItems(onLaunch: () -> Unit) {
+    val context = LocalContext.current
+    val resources = LocalResources.current
+    val app = context.applicationContext as KioskApp
+    val scope = rememberCoroutineScope()
+    fun toast(text: String) = Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            val result = runCatching {
+                val backup = app.library.exportBackup()
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri, "wt")!!.bufferedWriter().use {
+                        it.write(encodeLibraryBackup(backup))
+                    }
+                }
+                backup.size
+            }
+            toast(
+                result.fold(
+                    { resources.getQuantityString(R.plurals.library_exported, it, it) },
+                    { resources.getString(R.string.library_export_failed) },
+                ),
+            )
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            val result = runCatching {
+                val text = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() }
+                }
+                val backup = decodeLibraryBackup(text)
+                app.library.importBackup(backup)
+                backup.size
+            }
+            toast(
+                result.fold(
+                    { resources.getQuantityString(R.plurals.library_imported, it, it) },
+                    { resources.getString(R.string.library_import_failed) },
+                ),
+            )
+        }
+    }
+    NavigationDrawerItem(
+        label = { Text(stringResource(R.string.export_library)) },
+        icon = { Icon(Icons.Rounded.Upload, contentDescription = null) },
+        selected = false,
+        onClick = {
+            onLaunch()
+            exportLauncher.launch("kiosk-library.json")
+        },
+        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+    )
+    NavigationDrawerItem(
+        label = { Text(stringResource(R.string.import_library)) },
+        icon = { Icon(Icons.Rounded.Download, contentDescription = null) },
+        selected = false,
+        onClick = {
+            onLaunch()
+            importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
+        },
+        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+    )
 }
 
 @Composable
