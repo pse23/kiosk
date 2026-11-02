@@ -1,6 +1,9 @@
 name: Nightly Build
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch:
@@ -17,7 +20,7 @@ jobs:
     name: Build and publish nightly APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.repository_owner == 'shapeshed'
+    if: github.repository_owner == 'shapeshed' || github.repository == 'pse23/kiosk'
 
     steps:
       - name: Check out repository
@@ -26,7 +29,8 @@ jobs:
       - name: Check for commits in the last 24 hours
         id: check
         run: |
-          if [ -z "$(git log --since='24 hours ago' -1)" ]; then
+          # Pushes to main always build; the daily schedule only builds after new commits.
+          if [ "${{ github.event_name }}" = "schedule" ] && [ -z "$(git log --since='24 hours ago' -1)" ]; then
             echo "No commits in the last 24 hours; skipping nightly build."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
@@ -102,4 +106,4 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --prerelease \
             --title "Kiosk Nightly" \
-            --notes "Automated build from \`main\` @ ${{ github.sha }}. Signed with the same key as tagged releases, so it installs cleanly as an update over a previous nightly. For testing only — this tag is force-updated on every nightly build."
+            --notes "Automated build of \`main\` @ ${{ github.sha }}, rebuilt on every push to main. Signed with the same key as tagged releases, so it installs cleanly as an update over a previous nightly. For testing only — this tag is force-updated on every nightly build."
