@@ -28,6 +28,11 @@
     <string name="hide">Hide</string>
     <string name="story_hidden">Story hidden</string>
     <string name="undo">Undo</string>
+    <string name="swipe_actions">Swipe actions</string>
+    <string name="swipe_right">Swipe right</string>
+    <string name="swipe_left">Swipe left</string>
+    <string name="swipe_none">None</string>
+    <string name="swipe_actions_summary">What a sideways swipe on a story does. Set both to None to change feeds by swiping over stories.</string>
     <string name="muted">Muted</string>
     <string name="mute_site">Mute %1$s</string>
     <string name="muted_site_toast">Stories from %1$s are hidden</string>

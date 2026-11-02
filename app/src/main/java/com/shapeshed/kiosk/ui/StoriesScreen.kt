@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.SwipeLeft
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.ExpandedFullScreenContainedSearchBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -111,6 +112,7 @@ import com.shapeshed.kiosk.R
 import com.shapeshed.kiosk.data.Feed
 import com.shapeshed.kiosk.data.SearchFilter
 import com.shapeshed.kiosk.data.SearchSort
+import com.shapeshed.kiosk.data.SwipeAction
 import com.shapeshed.kiosk.data.Story
 import com.shapeshed.kiosk.data.hostOf
 import com.shapeshed.kiosk.data.newCommentCount
@@ -309,7 +311,9 @@ fun StoriesScreen(
                     }
                 },
             ) { padding ->
-                if (section == HomeSection.MUTED) {
+                if (section == HomeSection.SWIPE) {
+                    SwipeSettingsPane(modifier = Modifier.fillMaxSize().padding(padding))
+                } else if (section == HomeSection.MUTED) {
                     MutedPane(modifier = Modifier.fillMaxSize().padding(padding))
                 } else if (section != HomeSection.FEEDS) {
                     LibraryPane(
@@ -390,6 +394,7 @@ private fun KioskDrawer(
             LibraryDrawerItem(HomeSection.HISTORY, R.string.recently_viewed, Icons.Rounded.History, section, onSelectSection)
             HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             LibraryDrawerItem(HomeSection.MUTED, R.string.muted, Icons.Rounded.VisibilityOff, section, onSelectSection)
+            LibraryDrawerItem(HomeSection.SWIPE, R.string.swipe_actions, Icons.Rounded.SwipeLeft, section, onSelectSection)
             Box(Modifier.height(16.dp))
         }
     }
@@ -635,6 +640,11 @@ private fun StoryList(
     val app = LocalContext.current.applicationContext as KioskApp
     val seenCommentCounts by app.library.seenCommentCounts.collectAsStateWithLifecycle(emptyMap())
     val savedStoryIds by app.library.savedStoryIds.collectAsStateWithLifecycle(emptySet())
+    val swipeRight by app.settings.swipeRightAction.collectAsStateWithLifecycle(SwipeAction.SAVE)
+    val swipeLeft by app.settings.swipeLeftAction.collectAsStateWithLifecycle(SwipeAction.HIDE)
+    // Hiding needs a feed to hide from; in search results it falls back to doing nothing.
+    val rightAction = if (swipeRight == SwipeAction.HIDE && onHide == null) SwipeAction.NONE else swipeRight
+    val leftAction = if (swipeLeft == SwipeAction.HIDE && onHide == null) SwipeAction.NONE else swipeLeft
     val scope = rememberCoroutineScope()
     LaunchedEffect(refreshGeneration, refreshing) {
         if (refreshGeneration > 0 && !refreshing) {
@@ -672,23 +682,39 @@ private fun StoryList(
                 SwipeToDismissBoxState(SwipeToDismissBoxValue.Settled, positionalThreshold = { it * 0.4f })
             }
             // Swipe right to save or unsave (the row snaps back); swipe left to hide it.
+            fun act(action: SwipeAction) {
+                when (action) {
+                    SwipeAction.SAVE -> scope.launch {
+                        app.library.setStorySaved(story, !saved)
+                        swipeState.reset()
+                    }
+                    SwipeAction.HIDE -> onHide?.invoke(story.id)
+                    SwipeAction.NONE -> scope.launch { swipeState.reset() }
+                }
+            }
             SwipeToDismissBox(
                 state = swipeState,
-                enableDismissFromEndToStart = onHide != null,
+                enableDismissFromStartToEnd = rightAction != SwipeAction.NONE,
+                enableDismissFromEndToStart = leftAction != SwipeAction.NONE,
+                // Both directions off: don't intercept drags at all, so the feed pager gets them.
+                gesturesEnabled = rightAction != SwipeAction.NONE || leftAction != SwipeAction.NONE,
                 backgroundContent = {
-                    if (swipeState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
-                        SwipeHideBackground(shape = shape)
+                    val action = if (swipeState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
+                        leftAction
                     } else {
-                        SwipeSaveBackground(saved = saved, shape = shape)
+                        rightAction
+                    }
+                    val alignEnd = swipeState.dismissDirection == SwipeToDismissBoxValue.EndToStart
+                    when (action) {
+                        SwipeAction.SAVE -> SwipeSaveBackground(saved = saved, shape = shape, alignEnd = alignEnd)
+                        SwipeAction.HIDE -> SwipeHideBackground(shape = shape, alignEnd = alignEnd)
+                        SwipeAction.NONE -> Unit
                     }
                 },
                 onDismiss = { value ->
                     when (value) {
-                        SwipeToDismissBoxValue.StartToEnd -> scope.launch {
-                            app.library.setStorySaved(story, !saved)
-                            swipeState.reset()
-                        }
-                        SwipeToDismissBoxValue.EndToStart -> onHide?.invoke(story.id)
+                        SwipeToDismissBoxValue.StartToEnd -> act(rightAction)
+                        SwipeToDismissBoxValue.EndToStart -> act(leftAction)
                         SwipeToDismissBoxValue.Settled -> Unit
                     }
                 },
@@ -810,8 +836,9 @@ private fun storySupportingText(host: String?, newComments: Int, accent: Color):
 
 /** What a right swipe reveals: the action it will take once released past the threshold. */
 @Composable
-private fun SwipeSaveBackground(saved: Boolean, shape: Shape) {
+private fun SwipeSaveBackground(saved: Boolean, shape: Shape, alignEnd: Boolean = false) {
     Row(
+        horizontalArrangement = if (alignEnd) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxSize()
@@ -835,9 +862,9 @@ private fun SwipeSaveBackground(saved: Boolean, shape: Shape) {
 
 /** What a left swipe reveals: the row leaves the feed when released past the threshold. */
 @Composable
-private fun SwipeHideBackground(shape: Shape) {
+private fun SwipeHideBackground(shape: Shape, alignEnd: Boolean = true) {
     Row(
-        horizontalArrangement = Arrangement.End,
+        horizontalArrangement = if (alignEnd) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxSize()
