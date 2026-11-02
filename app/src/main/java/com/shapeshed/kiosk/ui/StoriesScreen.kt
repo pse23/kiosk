@@ -131,7 +131,7 @@ fun StoriesScreen(
     searchBarState: SearchBarState,
     onFeedStoriesChange: (Feed, List<Long>) -> Unit,
     onOpenStory: (Feed?, Long, Boolean) -> Unit,
-    onOpenLibraryStory: (List<Long>, Long) -> Unit,
+    onOpenLibraryStory: (List<Long>, Long, Long?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val app = LocalContext.current.applicationContext as KioskApp
