@@ -75,6 +75,8 @@ internal fun CommentsModalSheet(
     val scope = rememberCoroutineScope()
     // Tapping a comment folds its replies away; tapping it again brings them back.
     var collapsed by remember { mutableStateOf(emptySet<Long>()) }
+    var profileUser by remember { mutableStateOf<String?>(null) }
+    profileUser?.let { user -> UserProfileSheet(userId = user, onDismiss = { profileUser = null }) }
     val rows: List<VisibleComment> = remember(state, collapsed) {
         (state as? UiState.Content)?.data?.let { visibleThread(it, collapsed) }.orEmpty()
     }
@@ -128,6 +130,7 @@ internal fun CommentsModalSheet(
                                         }
                                     },
                                     onToggleSaved = { onToggleCommentSaved(flat.comment, !saved) },
+                                    onOpenAuthor = { profileUser = flat.comment.by },
                                 )
                                 HorizontalDivider()
                             }
@@ -195,6 +198,7 @@ private fun CommentRow(
     hiddenReplies: Int,
     onToggleCollapsed: () -> Unit,
     onToggleSaved: () -> Unit,
+    onOpenAuthor: () -> Unit,
 ) {
     val indent = (flat.depth.coerceAtMost(6) * 12).dp
     Column(
@@ -208,10 +212,14 @@ private fun CommentRow(
             .padding(start = 16.dp + indent, end = 4.dp, top = 4.dp, bottom = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // The name opens the author's profile; the rest of the row folds the thread.
             Text(
                 text = flat.comment.by,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clickable(onClickLabel = stringResource(R.string.view_profile), onClick = onOpenAuthor)
+                    .padding(vertical = 8.dp),
             )
             if (isOp) {
                 Surface(

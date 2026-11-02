@@ -19,6 +19,9 @@ class HnApi(private val client: OkHttpClient) {
     /** Raw JSON for a single item (story, comment, job, poll), or null if missing/unreadable. */
     fun itemJson(id: Long): String? = get("item/$id.json")
 
+    fun userJson(id: String): String? =
+        getUrl(BASE.toHttpUrl().newBuilder().addPathSegment("user").addPathSegment("$id.json").build().toString())
+
     fun searchJson(
         query: String,
         filter: SearchFilter,
