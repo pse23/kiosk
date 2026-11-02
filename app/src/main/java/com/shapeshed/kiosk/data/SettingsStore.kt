@@ -52,6 +52,35 @@ class SettingsStore(private val context: Context) {
     private val speedReaderFontKey = stringPreferencesKey("speed_reader_font")
     private val viewedKey = stringSetPreferencesKey("viewed_story_ids")
     private val selectedFeedKey = stringPreferencesKey("selected_feed")
+    private val mutedDomainsKey = stringSetPreferencesKey("muted_domains")
+    private val mutedKeywordsKey = stringSetPreferencesKey("muted_keywords")
+
+    /** Sites whose stories are hidden from the feeds (subdomains included). */
+    val mutedDomains: Flow<Set<String>> = context.dataStore.data.map { it[mutedDomainsKey].orEmpty() }
+
+    /** Words that hide a story from the feeds when its title contains them. */
+    val mutedKeywords: Flow<Set<String>> = context.dataStore.data.map { it[mutedKeywordsKey].orEmpty() }
+
+    /** Returns the stored form, or null if [input] has no usable host. */
+    suspend fun muteDomain(input: String): String? {
+        val domain = normalizeMutedDomain(input) ?: return null
+        context.dataStore.edit { it[mutedDomainsKey] = it[mutedDomainsKey].orEmpty() + domain }
+        return domain
+    }
+
+    suspend fun unmuteDomain(domain: String) {
+        context.dataStore.edit { it[mutedDomainsKey] = it[mutedDomainsKey].orEmpty() - domain }
+    }
+
+    suspend fun muteKeyword(input: String): String? {
+        val keyword = normalizeMutedKeyword(input) ?: return null
+        context.dataStore.edit { it[mutedKeywordsKey] = it[mutedKeywordsKey].orEmpty() + keyword }
+        return keyword
+    }
+
+    suspend fun unmuteKeyword(keyword: String) {
+        context.dataStore.edit { it[mutedKeywordsKey] = it[mutedKeywordsKey].orEmpty() - keyword }
+    }
 
     /** The feed the user last viewed; the home screen opens here. Defaults to [Feed.TOP]. */
     val selectedFeed: Flow<Feed> = context.dataStore.data.map { prefs ->

@@ -50,7 +50,7 @@ import com.shapeshed.kiosk.data.relativeTime
 import kotlinx.coroutines.launch
 
 /** What the home screen's list pane shows; picked from the navigation drawer. */
-enum class HomeSection { FEEDS, SAVED_STORIES, SAVED_COMMENTS, HISTORY }
+enum class HomeSection { FEEDS, SAVED_STORIES, SAVED_COMMENTS, HISTORY, MUTED }
 
 /**
  * One library list in place of the feed pager. Rows reuse the feed's grouped-card look. Tapping a
@@ -72,7 +72,7 @@ internal fun LibraryPane(
     var query by rememberSaveable(section) { mutableStateOf("") }
 
     when (section) {
-        HomeSection.FEEDS -> Unit
+        HomeSection.FEEDS, HomeSection.MUTED -> Unit
         HomeSection.SAVED_STORIES -> {
             val stories by app.library.savedStories.collectAsStateWithLifecycle(null)
             StoryLibraryList(
