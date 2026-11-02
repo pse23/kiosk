@@ -61,6 +61,15 @@ interface LibraryDao {
     @Query("DELETE FROM saved_stories WHERE storyId = :storyId")
     suspend fun deleteSavedStory(storyId: Long)
 
+    @Query("SELECT * FROM saved_stories WHERE storyId = :storyId LIMIT 1")
+    suspend fun savedStory(storyId: Long): SavedStoryEntity?
+
+    @Query("SELECT storyId FROM saved_stories")
+    suspend fun savedStoryIdList(): List<Long>
+
+    @Query("SELECT * FROM history WHERE storyId = :storyId LIMIT 1")
+    suspend fun historyEntry(storyId: Long): HistoryEntity?
+
     @Query("SELECT * FROM saved_comments ORDER BY savedAtMillis DESC")
     fun savedComments(): Flow<List<SavedCommentEntity>>
 
@@ -150,6 +159,31 @@ class LibraryStore(private val dao: LibraryDao) {
     }
 
     suspend fun unsaveStory(storyId: Long) = dao.deleteSavedStory(storyId)
+
+    /** Ids the reader cache must keep: saved stories stay readable offline. */
+    suspend fun pinnedStoryIds(): Set<Long> = dao.savedStoryIdList().toSet()
+
+    /**
+     * The library's own copy of a story, for opening it with no network. Saved stories win over
+     * history. Score, comment ids and self-post text are not stored, so they come back empty.
+     */
+    suspend fun offlineStory(storyId: Long): Story? {
+        dao.savedStory(storyId)?.let { return offlineStory(it.storyId, it.title, it.url, it.by, it.time) }
+        dao.historyEntry(storyId)?.let { return offlineStory(it.storyId, it.title, it.url, it.by, it.time) }
+        return null
+    }
+
+    private fun offlineStory(id: Long, title: String, url: String?, by: String, time: Long) = Story(
+        id = id,
+        title = title,
+        url = url,
+        by = by,
+        score = 0,
+        descendants = 0,
+        time = time,
+        kids = emptyList(),
+        text = null,
+    )
 
     suspend fun setCommentSaved(comment: Comment, storyId: Long, storyTitle: String, saved: Boolean) {
         if (saved) {

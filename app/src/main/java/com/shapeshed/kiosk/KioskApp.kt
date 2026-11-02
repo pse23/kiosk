@@ -45,7 +45,7 @@ class KioskApp : Application(), SingletonImageLoader.Factory {
     private val readerCacheDatabase: ReaderCacheDatabase by lazy { ReaderCacheDatabase.create(this) }
 
     val readerExtractions: ReaderExtractionStore by lazy {
-        ReaderExtractionStore(readerCacheDatabase.readerExtractionDao())
+        ReaderExtractionStore(readerCacheDatabase.readerExtractionDao()) { library.pinnedStoryIds() }
     }
 
     val settings: SettingsStore by lazy { SettingsStore(this) }

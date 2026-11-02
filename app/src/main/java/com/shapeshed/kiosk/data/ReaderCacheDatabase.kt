@@ -43,8 +43,11 @@ interface ReaderExtractionDao {
     @Query("SELECT COALESCE(SUM(byteSize), 0) FROM reader_extractions")
     suspend fun totalByteSize(): Long
 
-    @Query("SELECT storyId FROM reader_extractions ORDER BY lastAccessedMillis ASC LIMIT :limit")
-    suspend fun oldestStoryIds(limit: Int): List<Long>
+    @Query(
+        "SELECT storyId FROM reader_extractions WHERE storyId NOT IN (:pinned) " +
+            "ORDER BY lastAccessedMillis ASC LIMIT :limit",
+    )
+    suspend fun oldestStoryIds(limit: Int, pinned: List<Long>): List<Long>
 
     @Query("DELETE FROM reader_extractions WHERE storyId IN (:storyIds)")
     suspend fun deleteByStoryIds(storyIds: List<Long>)
@@ -78,6 +81,8 @@ abstract class ReaderCacheDatabase : RoomDatabase() {
 
 class ReaderExtractionStore(
     private val dao: ReaderExtractionDao,
+    /** Story ids eviction must skip (saved stories). */
+    private val pinnedStoryIds: suspend () -> Set<Long> = { emptySet() },
 ) {
     suspend fun get(storyId: Long): ReaderExtractionEntity? =
         withContext(Dispatchers.IO) {
@@ -117,8 +122,9 @@ class ReaderExtractionStore(
     }
 
     private suspend fun evictIfNeeded() {
+        val pinned = pinnedStoryIds().toList()
         while (dao.totalByteSize() > MaxCacheBytes) {
-            val oldest = dao.oldestStoryIds(EvictionBatchSize)
+            val oldest = dao.oldestStoryIds(EvictionBatchSize, pinned)
             if (oldest.isEmpty()) return
             dao.deleteByStoryIds(oldest)
         }
