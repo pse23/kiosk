@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Button
@@ -85,6 +86,7 @@ import com.shapeshed.kiosk.data.ReaderWidth
 import com.shapeshed.kiosk.data.ReaderTheme
 import com.shapeshed.kiosk.data.Story
 import com.shapeshed.kiosk.data.hostOf
+import com.shapeshed.kiosk.data.normalizeMutedDomain
 import com.shapeshed.kiosk.data.parseReaderArticle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -699,6 +701,24 @@ fun ArticleScreen(
                                                         pendingSpeedReader = true
                                                         selectedForceNativeReader = true
                                                         ReaderExtractionFailures.clear(activeStoryId)
+                                                    }
+                                                },
+                                            )
+                                        }
+                                        hostOf(story.url)?.let { host ->
+                                            val mutedToast = stringResource(
+                                                R.string.muted_site_toast,
+                                                normalizeMutedDomain(host) ?: host,
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.mute_site, host)) },
+                                                trailingIcon = { Icon(Icons.Filled.VisibilityOff, null) },
+                                                onClick = {
+                                                    showReaderMenu = false
+                                                    scope.launch {
+                                                        if (app.settings.muteDomain(host) != null) {
+                                                            Toast.makeText(context, mutedToast, Toast.LENGTH_SHORT).show()
+                                                        }
                                                     }
                                                 },
                                             )

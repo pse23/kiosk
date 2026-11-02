@@ -22,6 +22,16 @@
     <string name="collapsed">Collapsed</string>
     <string name="next_thread">Next thread</string>
     <string name="op_tag">OP</string>
+    <string name="muted">Muted</string>
+    <string name="mute_site">Mute %1$s</string>
+    <string name="muted_site_toast">Stories from %1$s are hidden</string>
+    <string name="muted_sites">Sites</string>
+    <string name="muted_words">Words in titles</string>
+    <string name="mute_site_hint">example.com</string>
+    <string name="mute_word_hint">A word or phrase</string>
+    <string name="add">Add</string>
+    <string name="unmute">Unmute %1$s</string>
+    <string name="muted_empty">Stories from muted sites, or with muted words in the title, are hidden from every feed.</string>
     <string name="retry">Retry</string>
     <string name="couldnt_load">Couldn\'t load stories.</string>
     <string name="couldnt_load_comments">Couldn\'t load comments.</string>

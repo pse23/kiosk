@@ -35,6 +35,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.ExpandedFullScreenContainedSearchBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -102,6 +103,7 @@ import com.shapeshed.kiosk.data.SearchSort
 import com.shapeshed.kiosk.data.Story
 import com.shapeshed.kiosk.data.hostOf
 import com.shapeshed.kiosk.data.newCommentCount
+import com.shapeshed.kiosk.data.isMuted
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -279,7 +281,9 @@ fun StoriesScreen(
                     }
                 },
             ) { padding ->
-                if (section != HomeSection.FEEDS) {
+                if (section == HomeSection.MUTED) {
+                    MutedPane(modifier = Modifier.fillMaxSize().padding(padding))
+                } else if (section != HomeSection.FEEDS) {
                     LibraryPane(
                         section = section,
                         selectedStoryId = selectedStoryId,
@@ -355,6 +359,8 @@ private fun KioskDrawer(
             LibraryDrawerItem(HomeSection.SAVED_STORIES, R.string.saved_stories, Icons.Rounded.Bookmarks, section, onSelectSection)
             LibraryDrawerItem(HomeSection.SAVED_COMMENTS, R.string.saved_comments, Icons.Rounded.Forum, section, onSelectSection)
             LibraryDrawerItem(HomeSection.HISTORY, R.string.recently_viewed, Icons.Rounded.History, section, onSelectSection)
+            HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            LibraryDrawerItem(HomeSection.MUTED, R.string.muted, Icons.Rounded.VisibilityOff, section, onSelectSection)
             Box(Modifier.height(16.dp))
         }
     }
@@ -540,13 +546,20 @@ private fun FeedPane(
         if (refreshGeneration > 0) viewModel.refresh()
     }
 
+    val settings = (LocalContext.current.applicationContext as KioskApp).settings
+    val mutedDomains by settings.mutedDomains.collectAsStateWithLifecycle(emptySet())
+    val mutedKeywords by settings.mutedKeywords.collectAsStateWithLifecycle(emptySet())
+
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         when (val current = state) {
             is UiState.Loading -> LoadingIndicator()
             is UiState.Error -> ErrorState(onRetry = viewModel::load)
             is UiState.Content -> {
-                LaunchedEffect(feed, current.data) {
-                    onStoryOrderChange(feed, current.data.map(Story::id))
+                val shown = remember(current.data, mutedDomains, mutedKeywords) {
+                    current.data.filterNot { isMuted(it, mutedDomains, mutedKeywords) }
+                }
+                LaunchedEffect(feed, shown) {
+                    onStoryOrderChange(feed, shown.map(Story::id))
                 }
                 PullToRefreshBox(
                     isRefreshing = refreshing,
@@ -554,7 +567,7 @@ private fun FeedPane(
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     StoryList(
-                        stories = current.data,
+                        stories = shown,
                         selectedStoryId = selectedStoryId,
                         viewedIds = viewedIds,
                         loadingMore = loadingMore,
