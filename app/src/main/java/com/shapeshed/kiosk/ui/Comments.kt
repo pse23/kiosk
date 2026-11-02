@@ -27,6 +27,7 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -62,6 +63,8 @@ internal fun CommentsModalSheet(
     commentCount: Int,
     state: UiState<List<FlatComment>>,
     focusCommentId: Long?,
+    /** The story's submitter; their comments carry an "OP" tag. */
+    storyAuthor: String?,
     savedCommentIds: Set<Long>,
     onToggleCommentSaved: (Comment, Boolean) -> Unit,
     onDismiss: () -> Unit,
@@ -114,6 +117,7 @@ internal fun CommentsModalSheet(
                                     nowSeconds = nowSeconds,
                                     saved = saved,
                                     focused = flat.comment.id == focusCommentId,
+                                    isOp = storyAuthor != null && flat.comment.by == storyAuthor,
                                     collapsed = isCollapsed,
                                     hiddenReplies = row.hiddenReplies,
                                     onToggleCollapsed = {
@@ -186,6 +190,7 @@ private fun CommentRow(
     nowSeconds: Long,
     saved: Boolean,
     focused: Boolean,
+    isOp: Boolean,
     collapsed: Boolean,
     hiddenReplies: Int,
     onToggleCollapsed: () -> Unit,
@@ -204,7 +209,26 @@ private fun CommentRow(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "${flat.comment.by}  ·  ${relativeTime(flat.comment.time, nowSeconds)}",
+                text = flat.comment.by,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            if (isOp) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(start = 6.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.op_tag),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                    )
+                }
+            }
+            Text(
+                text = "  ·  ${relativeTime(flat.comment.time, nowSeconds)}",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f),

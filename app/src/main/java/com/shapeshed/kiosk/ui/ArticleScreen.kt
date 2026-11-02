@@ -812,6 +812,7 @@ fun ArticleScreen(
                     commentCount = story?.descendants ?: 0,
                     state = commentsState,
                     focusCommentId = activeFocusCommentId,
+                    storyAuthor = story?.by,
                     savedCommentIds = savedCommentIds,
                     onToggleCommentSaved = { comment, saved ->
                         story?.let { s ->
