@@ -96,6 +96,10 @@
     <string name="unsave_comment">Remove comment from saved</string>
     <string name="remove_from_saved">Remove from saved</string>
     <string name="clear_history">Clear history</string>
+    <string name="search_saved_stories">Search saved stories</string>
+    <string name="search_saved_comments">Search saved comments</string>
+    <string name="search_history">Search recently viewed</string>
+    <string name="no_library_matches">Nothing matches.</string>
     <string name="no_saved_stories">Stories you save appear here.</string>
     <string name="no_saved_comments">Comments you save appear here.</string>
     <string name="no_history">Stories you open appear here.</string>
