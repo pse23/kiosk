@@ -11,6 +11,10 @@
         <item quantity="one">%d comment</item>
         <item quantity="other">%d comments</item>
     </plurals>
+    <plurals name="new_comments">
+        <item quantity="one">%d new comment</item>
+        <item quantity="other">%d new comments</item>
+    </plurals>
     <string name="retry">Retry</string>
     <string name="couldnt_load">Couldn\'t load stories.</string>
     <string name="couldnt_load_comments">Couldn\'t load comments.</string>

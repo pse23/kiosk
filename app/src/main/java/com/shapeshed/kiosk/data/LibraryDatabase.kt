@@ -1,6 +1,7 @@
 package com.shapeshed.kiosk.data
 
 import android.content.Context
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -10,6 +11,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -48,6 +51,8 @@ data class HistoryEntity(
     val by: String,
     val time: Long,
     val viewedAtMillis: Long,
+    /** Highest comment count seen on a visit; drives the "N new" badge in the feed. */
+    @ColumnInfo(defaultValue = "0") val commentCount: Int = 0,
 )
 
 @Dao
@@ -69,6 +74,9 @@ interface LibraryDao {
 
     @Query("SELECT * FROM history WHERE storyId = :storyId LIMIT 1")
     suspend fun historyEntry(storyId: Long): HistoryEntity?
+
+    @Query("SELECT storyId, commentCount FROM history")
+    fun seenCommentCounts(): Flow<List<SeenCommentCount>>
 
     @Query("SELECT * FROM saved_comments ORDER BY savedAtMillis DESC")
     fun savedComments(): Flow<List<SavedCommentEntity>>
@@ -97,21 +105,29 @@ interface LibraryDao {
 
 @Database(
     entities = [SavedStoryEntity::class, SavedCommentEntity::class, HistoryEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class LibraryDatabase : RoomDatabase() {
     abstract fun libraryDao(): LibraryDao
 
     companion object {
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE history ADD COLUMN commentCount INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun create(context: Context): LibraryDatabase =
             Room.databaseBuilder(
                 context.applicationContext,
                 LibraryDatabase::class.java,
                 "library.db",
-            ).build()
+            ).addMigrations(MIGRATION_1_2).build()
     }
 }
+
+data class SeenCommentCount(val storyId: Long, val commentCount: Int)
 
 /** A story row as the library lists show it, independent of which table it came from. */
 data class LibraryStory(
@@ -136,6 +152,11 @@ class LibraryStore(private val dao: LibraryDao) {
     val savedComments: Flow<List<SavedCommentEntity>> = dao.savedComments()
 
     val savedCommentIds: Flow<Set<Long>> = dao.savedComments().map { rows -> rows.mapTo(HashSet()) { it.commentId } }
+
+    /** Comment count per previously opened story, for the feed's "N new" badge. */
+    val seenCommentCounts: Flow<Map<Long, Int>> = dao.seenCommentCounts().map { rows ->
+        rows.associate { it.storyId to it.commentCount }
+    }
 
     val history: Flow<List<LibraryStory>> = dao.history().map { rows ->
         rows.map { LibraryStory(it.storyId, it.title, it.url, it.by, it.time, it.viewedAtMillis) }
@@ -207,6 +228,9 @@ class LibraryStore(private val dao: LibraryDao) {
 
     /** Move [story] to the top of history, keeping the newest [MAX_HISTORY] entries. */
     suspend fun recordView(story: Story) {
+        // Keep the highest count seen: the offline copy of a story reports 0 comments, and that
+        // must not reset the baseline.
+        val seen = maxOf(dao.historyEntry(story.id)?.commentCount ?: 0, story.descendants)
         dao.putHistory(
             HistoryEntity(
                 storyId = story.id,
@@ -215,6 +239,7 @@ class LibraryStore(private val dao: LibraryDao) {
                 by = story.by,
                 time = story.time,
                 viewedAtMillis = System.currentTimeMillis(),
+                commentCount = seen,
             ),
         )
         dao.trimHistory(MAX_HISTORY)
