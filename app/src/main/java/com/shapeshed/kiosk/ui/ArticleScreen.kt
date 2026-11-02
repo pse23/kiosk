@@ -101,6 +101,7 @@ fun ArticleScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     forceNativeReader: Boolean = false,
+    focusCommentId: Long? = null,
     storyIds: List<Long> = emptyList(),
     previousStoryId: Long? = null,
     nextStoryId: Long? = null,
@@ -236,7 +237,13 @@ fun ArticleScreen(
     val lastScrollY = remember(activeStoryId) { intArrayOf(0) }
 
     // Comments are summoned from the top bar, not always on screen — so the reader stays clean.
-    var showComments by remember(activeStoryId) { mutableStateOf(false) }
+    // Opened from a saved comment: start with the thread open at that comment. Only applies to the
+    // story the destination named, not to stories swiped to afterwards.
+    val activeFocusCommentId = focusCommentId?.takeIf { activeStoryId == storyId }
+    var showComments by remember(activeStoryId) { mutableStateOf(showChrome && activeFocusCommentId != null) }
+    LaunchedEffect(activeFocusCommentId, showChrome) {
+        if (showChrome && activeFocusCommentId != null) viewModel.loadComments()
+    }
     // System bars follow the app bar: visible together, and hidden together (immersive) when the
     // user scrolls down — the native "immersive" API, tied to scroll direction like Instagram.
     val view = LocalView.current
@@ -804,6 +811,7 @@ fun ArticleScreen(
                 CommentsModalSheet(
                     commentCount = story?.descendants ?: 0,
                     state = commentsState,
+                    focusCommentId = activeFocusCommentId,
                     savedCommentIds = savedCommentIds,
                     onToggleCommentSaved = { comment, saved ->
                         story?.let { s ->

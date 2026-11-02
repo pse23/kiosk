@@ -46,14 +46,15 @@ enum class HomeSection { FEEDS, SAVED_STORIES, SAVED_COMMENTS, HISTORY }
 
 /**
  * One library list in place of the feed pager. Rows reuse the feed's grouped-card look. Tapping a
- * row opens its story; [onOpenStory] receives the list's story ids so the article pager can swipe
+ * row opens its story (a saved comment also opens the thread at that comment); [onOpenStory]
+ * receives the list's story ids so the article pager can swipe
  * through the library in the same order.
  */
 @Composable
 internal fun LibraryPane(
     section: HomeSection,
     selectedStoryId: Long?,
-    onOpenStory: (ids: List<Long>, id: Long) -> Unit,
+    onOpenStory: (ids: List<Long>, id: Long, commentId: Long?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val app = LocalContext.current.applicationContext as KioskApp
@@ -69,7 +70,7 @@ internal fun LibraryPane(
                 emptyText = stringResource(R.string.no_saved_stories),
                 selectedStoryId = selectedStoryId,
                 nowSeconds = nowSeconds,
-                onOpenStory = onOpenStory,
+                onOpenStory = { ids, id -> onOpenStory(ids, id, null) },
                 onUnsave = { id -> scope.launch { app.library.unsaveStory(id) } },
                 modifier = modifier,
             )
@@ -81,7 +82,7 @@ internal fun LibraryPane(
                 emptyText = stringResource(R.string.no_history),
                 selectedStoryId = selectedStoryId,
                 nowSeconds = nowSeconds,
-                onOpenStory = onOpenStory,
+                onOpenStory = { ids, id -> onOpenStory(ids, id, null) },
                 onUnsave = null,
                 header = {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -178,7 +179,7 @@ private fun CommentLibraryList(
     comments: List<SavedCommentEntity>?,
     selectedStoryId: Long?,
     nowSeconds: Long,
-    onOpenStory: (List<Long>, Long) -> Unit,
+    onOpenStory: (List<Long>, Long, Long?) -> Unit,
     onUnsave: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -198,7 +199,7 @@ private fun CommentLibraryList(
             LibraryCard(
                 selected = selected,
                 shape = groupedShape(index, comments.size),
-                onClick = { onOpenStory(storyIds, comment.storyId) },
+                onClick = { onOpenStory(storyIds, comment.storyId, comment.commentId) },
             ) {
                 Column(Modifier.padding(start = 16.dp, top = 4.dp, bottom = 12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {

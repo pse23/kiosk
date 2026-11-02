@@ -113,7 +113,7 @@ fun KioskListDetail() {
         // article appeared on top of it.
         if (feed == null) scope.launch { searchBarState.animateToCollapsed() }
     }
-    fun openLibraryStory(ids: List<Long>, id: Long, forceNativeReader: Boolean = false) {
+    fun openLibraryStory(ids: List<Long>, id: Long, forceNativeReader: Boolean = false, focusCommentId: Long? = null) {
         libraryStoryIds = ids
         articleOpenedFromLibrary = true
         articleOpenedFromSearch = false
@@ -121,7 +121,11 @@ fun KioskListDetail() {
             app.settings.markViewed(id)
             navigator.navigateTo(
                 ListDetailPaneScaffoldRole.Detail,
-                ArticleDestination(storyId = id, forceNativeReader = forceNativeReader).toNavigationKey(),
+                ArticleDestination(
+                    storyId = id,
+                    forceNativeReader = forceNativeReader,
+                    focusCommentId = focusCommentId,
+                ).toNavigationKey(),
             )
         }
     }
@@ -159,7 +163,7 @@ fun KioskListDetail() {
                         storyIdsByFeed[feed] = storyIds
                     },
                     onOpenStory = ::openStory,
-                    onOpenLibraryStory = { ids, id -> openLibraryStory(ids, id) },
+                    onOpenLibraryStory = { ids, id, commentId -> openLibraryStory(ids, id, focusCommentId = commentId) },
                 )
             }
         },
@@ -177,6 +181,7 @@ fun KioskListDetail() {
                     ArticleScreen(
                         storyId = destination.storyId,
                         forceNativeReader = destination.forceNativeReader,
+                        focusCommentId = destination.focusCommentId,
                         storyIds = activeStoryIds,
                         previousStoryId = previousStoryInListId,
                         nextStoryId = nextStoryInListId,
@@ -207,15 +212,24 @@ fun KioskListDetail() {
 data class ArticleDestination(
     val storyId: Long,
     val forceNativeReader: Boolean = false,
+    /** Open the comments sheet scrolled to this comment (from Saved comments). */
+    val focusCommentId: Long? = null,
 )
 
+/** Key format: `<storyId>[:native][#<commentId>]`. */
 private fun ArticleDestination.toNavigationKey(): String =
-    if (forceNativeReader) "$storyId:native" else storyId.toString()
+    buildString {
+        append(storyId)
+        if (forceNativeReader) append(":native")
+        focusCommentId?.let { append('#').append(it) }
+    }
 
 private fun String.toArticleDestinationOrNull(): ArticleDestination? {
-    val storyId = substringBefore(':').toLongOrNull() ?: return null
-    val forceNativeReader = substringAfter(':', missingDelimiterValue = "") == "native"
-    return ArticleDestination(storyId = storyId, forceNativeReader = forceNativeReader)
+    val base = substringBefore('#')
+    val storyId = base.substringBefore(':').toLongOrNull() ?: return null
+    val forceNativeReader = base.substringAfter(':', missingDelimiterValue = "") == "native"
+    val focusCommentId = substringAfter('#', missingDelimiterValue = "").toLongOrNull()
+    return ArticleDestination(storyId = storyId, forceNativeReader = forceNativeReader, focusCommentId = focusCommentId)
 }
 
 @Composable

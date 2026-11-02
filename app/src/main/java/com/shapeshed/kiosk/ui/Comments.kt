@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
@@ -26,6 +27,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,12 +50,20 @@ import com.shapeshed.kiosk.data.relativeTime
 internal fun CommentsModalSheet(
     commentCount: Int,
     state: UiState<List<FlatComment>>,
+    focusCommentId: Long?,
     savedCommentIds: Set<Long>,
     onToggleCommentSaved: (Comment, Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val nowSeconds = remember { System.currentTimeMillis() / 1000 }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val listState = rememberLazyListState()
+    // Scroll once to the focused comment when the thread arrives.
+    LaunchedEffect(state, focusCommentId) {
+        val comments = (state as? UiState.Content)?.data ?: return@LaunchedEffect
+        val index = comments.indexOfFirst { it.comment.id == focusCommentId }
+        if (index >= 0) listState.scrollToItem(index)
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -63,7 +73,7 @@ internal fun CommentsModalSheet(
         // Bound the height so the LazyColumn has a fixed frame to scroll within.
         Column(Modifier.fillMaxWidth().fillMaxHeight()) {
             HorizontalDivider()
-            LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
+            LazyColumn(Modifier.fillMaxWidth().weight(1f), state = listState) {
                 when (state) {
                     is UiState.Loading -> item(key = "loading") {
                         Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -83,6 +93,7 @@ internal fun CommentsModalSheet(
                                     flat = flat,
                                     nowSeconds = nowSeconds,
                                     saved = saved,
+                                    focused = flat.comment.id == focusCommentId,
                                     onToggleSaved = { onToggleCommentSaved(flat.comment, !saved) },
                                 )
                                 HorizontalDivider()
@@ -132,12 +143,17 @@ private fun CommentRow(
     flat: FlatComment,
     nowSeconds: Long,
     saved: Boolean,
+    focused: Boolean,
     onToggleSaved: () -> Unit,
 ) {
     val indent = (flat.depth.coerceAtMost(6) * 12).dp
     Column(
         Modifier
             .fillMaxWidth()
+            .then(
+                // A light tint keeps the comment's own text colours readable.
+                if (focused) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) else Modifier,
+            )
             .padding(start = 16.dp + indent, end = 4.dp, top = 4.dp, bottom = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
