@@ -1,6 +1,7 @@
 package com.shapeshed.kiosk.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -24,11 +26,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,8 +44,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.shapeshed.kiosk.R
+import kotlinx.coroutines.launch
 import com.shapeshed.kiosk.data.Comment
 import com.shapeshed.kiosk.data.FlatComment
+import com.shapeshed.kiosk.data.VisibleComment
+import com.shapeshed.kiosk.data.nextTopLevelIndex
+import com.shapeshed.kiosk.data.visibleThread
 import com.shapeshed.kiosk.data.relativeTime
 
 /**
@@ -58,6 +69,12 @@ internal fun CommentsModalSheet(
     val nowSeconds = remember { System.currentTimeMillis() / 1000 }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    // Tapping a comment folds its replies away; tapping it again brings them back.
+    var collapsed by remember { mutableStateOf(emptySet<Long>()) }
+    val rows: List<VisibleComment> = remember(state, collapsed) {
+        (state as? UiState.Content)?.data?.let { visibleThread(it, collapsed) }.orEmpty()
+    }
     // Scroll once to the focused comment when the thread arrives.
     LaunchedEffect(state, focusCommentId) {
         val comments = (state as? UiState.Content)?.data ?: return@LaunchedEffect
@@ -71,6 +88,7 @@ internal fun CommentsModalSheet(
         dragHandle = { CommentsSheetHandle(commentCount, onDismiss) },
     ) {
         // Bound the height so the LazyColumn has a fixed frame to scroll within.
+        Box(Modifier.fillMaxWidth().fillMaxHeight()) {
         Column(Modifier.fillMaxWidth().fillMaxHeight()) {
             HorizontalDivider()
             LazyColumn(Modifier.fillMaxWidth().weight(1f), state = listState) {
@@ -87,19 +105,43 @@ internal fun CommentsModalSheet(
                         if (state.data.isEmpty()) {
                             item(key = "empty") { Text(stringResource(R.string.no_comments), Modifier.padding(16.dp)) }
                         } else {
-                            items(state.data, key = { it.comment.id }) { flat ->
+                            items(rows, key = { it.flat.comment.id }) { row ->
+                                val flat = row.flat
                                 val saved = flat.comment.id in savedCommentIds
+                                val isCollapsed = flat.comment.id in collapsed
                                 CommentRow(
                                     flat = flat,
                                     nowSeconds = nowSeconds,
                                     saved = saved,
                                     focused = flat.comment.id == focusCommentId,
+                                    collapsed = isCollapsed,
+                                    hiddenReplies = row.hiddenReplies,
+                                    onToggleCollapsed = {
+                                        collapsed = if (isCollapsed) {
+                                            collapsed - flat.comment.id
+                                        } else {
+                                            collapsed + flat.comment.id
+                                        }
+                                    },
                                     onToggleSaved = { onToggleCommentSaved(flat.comment, !saved) },
                                 )
                                 HorizontalDivider()
                             }
                         }
                     }
+                }
+            }
+        }
+            // Jump past the current thread's replies to the next top-level comment.
+            if (rows.isNotEmpty()) {
+                SmallFloatingActionButton(
+                    onClick = {
+                        val next = nextTopLevelIndex(rows, listState.firstVisibleItemIndex)
+                        if (next != null) scope.launch { listState.animateScrollToItem(next) }
+                    },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                ) {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.next_thread))
                 }
             }
         }
@@ -144,12 +186,16 @@ private fun CommentRow(
     nowSeconds: Long,
     saved: Boolean,
     focused: Boolean,
+    collapsed: Boolean,
+    hiddenReplies: Int,
+    onToggleCollapsed: () -> Unit,
     onToggleSaved: () -> Unit,
 ) {
     val indent = (flat.depth.coerceAtMost(6) * 12).dp
     Column(
         Modifier
             .fillMaxWidth()
+            .clickable(onClick = onToggleCollapsed)
             .then(
                 // A light tint keeps the comment's own text colours readable.
                 if (focused) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) else Modifier,
@@ -181,10 +227,23 @@ private fun CommentRow(
                 }
             }
         }
-        Text(
-            text = flat.comment.text,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(end = 12.dp),
-        )
+        if (collapsed) {
+            // Folded: the header stays, the text and replies give way to a count.
+            Text(
+                text = if (hiddenReplies > 0) {
+                    pluralStringResource(R.plurals.hidden_replies, hiddenReplies, hiddenReplies)
+                } else {
+                    stringResource(R.string.collapsed)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                text = flat.comment.text,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(end = 12.dp),
+            )
+        }
     }
 }
