@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.shapeshed.kiosk.KioskApp
 import com.shapeshed.kiosk.data.FlatComment
 import com.shapeshed.kiosk.data.HnRepository
+import com.shapeshed.kiosk.data.LibraryStore
 import com.shapeshed.kiosk.data.Story
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +18,7 @@ import kotlinx.coroutines.launch
 /** Backs a single story's article screen: the story itself, and comments when requested. */
 class ArticleViewModel(
     private val repository: HnRepository,
+    private val library: LibraryStore,
     private val storyId: Long,
 ) : ViewModel() {
 
@@ -36,6 +38,9 @@ class ArticleViewModel(
         viewModelScope.launch {
             _story.value = UiState.Loading
             val result = runCatching { repository.story(storyId) ?: error("story $storyId not found") }
+                // Offline (or the item vanished): fall back to the library's copy so saved and
+                // recently viewed stories still open, and the cached reader text can show.
+                .recoverCatching { error -> library.offlineStory(storyId) ?: throw error }
             _story.value = result.fold({ UiState.Content(it) }, { UiState.Error(it) })
         }
     }
@@ -64,7 +69,7 @@ class ArticleViewModel(
 
     companion object {
         fun factory(app: KioskApp, storyId: Long): ViewModelProvider.Factory = viewModelFactory {
-            initializer { ArticleViewModel(app.repository, storyId) }
+            initializer { ArticleViewModel(app.repository, app.library, storyId) }
         }
     }
 }
